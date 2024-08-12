@@ -12,8 +12,9 @@ export class MaziApiStack extends cdk.Stack {
     super(scope, id, props);
 
     const queue = new sqs.Queue(this, "MazeDeviceDataQueue", {
-      visibilityTimeout: cdk.Duration.seconds(30),
+      visibilityTimeout: cdk.Duration.seconds(120),
       retentionPeriod: cdk.Duration.days(4),
+      receiveMessageWaitTime: cdk.Duration.seconds(10),
     });
 
     const table = new dynamodb.Table(this, "MazeDeviceData", {
@@ -45,7 +46,7 @@ export class MaziApiStack extends cdk.Stack {
       sortKey: { name: "timestamp", type: dynamodb.AttributeType.STRING },
       projectionType: dynamodb.ProjectionType.ALL,
     });
-    
+
     table.addGlobalSecondaryIndex({
       indexName: "DeviceIdIndex",
       partitionKey: { name: "deviceId", type: dynamodb.AttributeType.STRING },
@@ -55,6 +56,7 @@ export class MaziApiStack extends cdk.Stack {
 
     const postLambda = new lambda.Function(this, "PostLambda", {
       runtime: lambda.Runtime.NODEJS_18_X,
+      timeout: cdk.Duration.seconds(30),
       code: lambda.Code.fromAsset("dist/lambda"),
       handler: "post.handler",
       environment: {
@@ -124,6 +126,8 @@ export class MaziApiStack extends cdk.Stack {
     processLambda.addEventSource(
       new lambdaEventSources.SqsEventSource(queue, {
         batchSize: 10,
+        maxConcurrency: 20,
+        reportBatchItemFailures: true,
       })
     );
   }
